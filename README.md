@@ -6,9 +6,9 @@ Web UI for [Trivy](https://github.com/aquasecurity/trivy) image scans. Queue sca
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-![Scans](docs/1.jpg)
-![Statistics](docs/2.jpg)
-![Containers](docs/3.jpg)
+![Scans](docs/1.JPG)
+![Statistics](docs/2.JPG)
+![Containers](docs/3.JPG)
 
 ## Features
 
