@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivy GUI 🛡️</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+<div id="login-view" class="hidden min-h-screen flex items-center justify-center">
+  <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl w-96 border border-slate-700">
+    <div class="flex justify-end mb-2">
+      <div class="flex gap-1 text-xs">
+        <button type="button" onclick="setLang('pl')" class="lang-btn px-2 py-0.5 rounded" data-lang="pl">PL</button>
+        <button type="button" onclick="setLang('en')" class="lang-btn px-2 py-0.5 rounded" data-lang="en">EN</button>
+      </div>
+    </div>
+    <h1 class="text-2xl font-bold mb-1 text-center">🛡️ Trivy GUI</h1>
+    <p class="text-slate-400 text-sm text-center mb-6" data-i18n="subtitle">Skaner podatności obrazów Docker</p>
+    <input id="login-user" data-i18n-placeholder="login" placeholder="Login" class="w-full mb-3 px-4 py-2 rounded-lg bg-slate-700 border border-slate-600 focus:outline-none focus:border-sky-500">
+    <input id="login-pass" type="password" data-i18n-placeholder="password" placeholder="Hasło" class="w-full mb-4 px-4 py-2 rounded-lg bg-slate-700 border border-slate-600 focus:outline-none focus:border-sky-500">
+    <button onclick="login()" class="w-full py-2 bg-sky-600 hover:bg-sky-500 rounded-lg font-semibold transition" data-i18n="sign_in">Zaloguj się</button>
+    <p id="login-error" class="text-red-400 text-sm mt-3 text-center hidden"></p>
+  </div>
+</div>
+
+<div id="app-view" class="hidden max-w-7xl mx-auto p-6">
+  <header class="flex justify-between items-center mb-6 gap-3 flex-wrap">
+    <h1 class="text-2xl font-bold">🛡️ Trivy GUI</h1>
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="flex gap-1 text-xs bg-slate-800 rounded-lg p-1 border border-slate-700">
+        <button type="button" onclick="setLang('pl')" class="lang-btn px-2 py-1 rounded" data-lang="pl">PL</button>
+        <button type="button" onclick="setLang('en')" class="lang-btn px-2 py-1 rounded" data-lang="en">EN</button>
+      </div>
+      <span id="me-label" class="text-sm text-slate-400"></span>
+      <button onclick="logout()" class="text-slate-400 hover:text-white text-sm" data-i18n="logout">Wyloguj ⏻</button>
+    </div>
+  </header>
+
+  <div class="flex gap-2 mb-6 border-b border-slate-700 overflow-x-auto">
+    <button id="btn-scans" onclick="showTab('scans')" class="tab-btn px-4 py-2 border-b-2 border-sky-400 text-sky-400 font-semibold whitespace-nowrap" data-i18n="tab_scans">🔍 Skany</button>
+    <button id="btn-stats" onclick="showTab('stats')" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white whitespace-nowrap" data-i18n="tab_stats">📈 Statystyki</button>
+    <button id="btn-containers" onclick="showTab('containers')" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white whitespace-nowrap" data-i18n="tab_containers">🐋 Kontenery</button>
+    <button id="btn-admin" onclick="showTab('admin')" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white hidden whitespace-nowrap" data-i18n="tab_admin">⚙️ Administracja</button>
+  </div>
+
+  <div id="tab-scans" class="tab-panel">
+    <div id="scan-kpis" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"></div>
+
+    <div id="new-scan-card" class="bg-slate-800 rounded-2xl p-6 mb-6 border border-slate-700">
+      <div class="flex justify-between items-start gap-3 mb-4 flex-wrap">
+        <div>
+          <h2 class="font-semibold" data-i18n="new_scan">🔍 Nowy skan</h2>
+          <p class="text-xs text-slate-500 mt-1" data-i18n="new_scan_hint">Obraz z Docker Hub, prywatnego rejestru albo lokalny tag z hosta</p>
+        </div>
+        <span id="queue-badge" class="text-xs px-3 py-1 rounded-full bg-slate-700 text-slate-300"></span>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <input id="scan-image" data-i18n-placeholder="image_ph" placeholder="np. nginx:latest lub registry.firma.pl/app:1.0"
+               class="flex-1 min-w-[280px] px-4 py-2 rounded-lg bg-slate-700 border border-slate-600 focus:outline-none focus:border-sky-500">
+        <button onclick="startScan()" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold transition" data-i18n="scan_btn">Skanuj ▶</button>
+      </div>
+      <label class="flex items-center gap-2 mt-3 text-sm text-slate-300 cursor-pointer">
+        <input type="checkbox" id="scan-secrets-checkbox" class="w-4 h-4">
+        <span data-i18n="scan_secrets">🔐 Skanuj również sekrety (klucze API, hasła, tokeny) — wydłuża czas skanowania</span>
+      </label>
+      <details class="mt-3 text-sm text-slate-400">
+        <summary class="cursor-pointer hover:text-white" data-i18n="private_registry">🔑 Prywatny rejestr (opcjonalnie)</summary>
+        <div class="flex gap-3 mt-3 flex-wrap">
+          <input id="reg-user" data-i18n-placeholder="reg_user" placeholder="Login rejestru" class="px-4 py-2 rounded-lg bg-slate-700 border border-slate-600">
+          <input id="reg-pass" type="password" data-i18n-placeholder="reg_pass" placeholder="Hasło / token" class="px-4 py-2 rounded-lg bg-slate-700 border border-slate-600">
+        </div>
+      </details>
+    </div>
+
+    <div id="readonly-notice" class="hidden bg-slate-800/50 rounded-2xl p-4 mb-6 border border-slate-700 text-sm text-slate-400" data-i18n="readonly_notice">
+      👁️ Masz dostęp tylko do przeglądania i pobierania raportów. Uruchamianie i usuwanie skanów wymaga roli manager lub admin.
+    </div>
+
+    <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
+        <div>
+          <h2 class="font-semibold" data-i18n="scan_history">📊 Historia skanów</h2>
+          <p class="text-xs text-slate-500 mt-1" data-i18n="scan_history_hint">Zaznacz dwa zakończone skany tego samego obrazu, aby porównać CVE</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <input id="scan-filter" data-i18n-placeholder="filter_image" placeholder="Filtruj obraz…" oninput="renderScans()"
+                 class="px-3 py-1.5 rounded-lg bg-slate-700 border border-slate-600 text-sm w-52">
+          <span id="scan-selected-count" class="text-sm text-slate-400"></span>
+          <div id="scan-bulk-actions" class="hidden flex items-center gap-2 flex-wrap">
+            <button id="btn-diff-scans" onclick="compareSelectedScans()" class="hidden px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-semibold" data-i18n="compare">⚖️ Porównaj</button>
+            <button onclick="bulkExportZip()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">📦 ZIP</button>
+            <button onclick="bulkDeleteScans()" class="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-semibold" data-i18n="delete_selected">🗑 Usuń zaznaczone</button>
+          </div>
+        </div>
+      </div>
+      <div id="scan-status-filters" class="flex gap-2 mb-4 flex-wrap"></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 border-b border-slate-700">
+            <tr>
+              <th id="th-scan-check" class="text-left py-2 px-2"><input type="checkbox" onchange="toggleSelectAllScans(this)"></th>
+              <th class="text-left px-2" data-i18n="col_image">Obraz</th>
+              <th class="text-left px-2" data-i18n="col_date">Data</th>
+              <th class="text-left px-2" data-i18n="col_author">Autor</th>
+              <th class="text-left px-2" data-i18n="col_status">Status</th>
+              <th class="text-left px-2" data-i18n="col_vulns">Podatności</th>
+              <th class="text-left px-2" data-i18n="col_secrets">Sekrety</th>
+              <th class="text-right px-2" data-i18n="col_actions">Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="scan-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-stats" class="tab-panel hidden">
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+      <div>
+        <h2 class="font-semibold" data-i18n="stats_title">📈 Statystyki i trendy</h2>
+        <p id="stats-period-label" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button data-days="7"  onclick="loadStats(7)"  class="range-btn px-3 py-1.5 rounded-lg text-sm bg-slate-700 hover:bg-slate-600">7</button>
+        <button data-days="30" onclick="loadStats(30)" class="range-btn px-3 py-1.5 rounded-lg text-sm bg-slate-700 hover:bg-slate-600">30</button>
+        <button data-days="90" onclick="loadStats(90)" class="range-btn px-3 py-1.5 rounded-lg text-sm bg-slate-700 hover:bg-slate-600">90</button>
+        <button data-days="0"  onclick="loadStats(0)"  class="range-btn px-3 py-1.5 rounded-lg text-sm bg-slate-700 hover:bg-slate-600" data-i18n="range_all">Całość</button>
+        <button onclick="loadStats()" class="text-sm text-sky-400 hover:underline ml-2" data-i18n="refresh">🔄 Odśwież</button>
+      </div>
+    </div>
+
+    <div id="stats-loading" class="hidden text-center text-slate-400 py-16"></div>
+    <div id="stats-empty" class="hidden text-center text-slate-500 py-16" data-i18n="stats_empty">Brak skanów w wybranym okresie.</div>
+
+    <div id="stats-content" class="hidden">
+      <div id="stats-kpis" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6"></div>
+
+      <div class="grid lg:grid-cols-3 gap-6 mb-6">
+        <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 lg:col-span-2">
+          <h3 class="font-semibold mb-4" data-i18n="chart_timeline">📉 Podatności w czasie</h3>
+          <div class="relative h-80">
+            <canvas id="chart-timeline"></canvas>
+            <p id="chart-timeline-empty" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-sm" data-i18n="no_data">Brak danych</p>
+          </div>
+        </div>
+        <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 class="font-semibold mb-4" data-i18n="chart_posture">🎯 Aktualna postawa</h3>
+          <p class="text-xs text-slate-500 mb-3" data-i18n="chart_posture_hint">Suma z ostatniego skanu każdego obrazu</p>
+          <div class="relative h-64">
+            <canvas id="chart-posture"></canvas>
+            <p id="chart-posture-empty" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-sm" data-i18n="no_vulns">✨ Brak podatności</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 class="font-semibold mb-4" data-i18n="top_vuln_images">⚠️ Najbardziej podatne obrazy</h3>
+          <div class="relative h-96">
+            <canvas id="chart-top-vuln"></canvas>
+            <p id="chart-top-vuln-empty" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-sm" data-i18n="no_data">Brak danych</p>
+          </div>
+        </div>
+        <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 class="font-semibold mb-4" data-i18n="most_scanned">🔁 Najczęściej skanowane</h3>
+          <div class="relative h-96">
+            <canvas id="chart-most-scanned"></canvas>
+            <p id="chart-most-scanned-empty" class="hidden absolute inset-0 flex items-center justify-center text-slate-500 text-sm" data-i18n="no_data">Brak danych</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="trends-card" class="hidden bg-slate-800 rounded-2xl p-6 border border-slate-700 mb-6">
+        <h3 class="font-semibold mb-1" data-i18n="image_trends">📊 Trend obrazów (CRITICAL + HIGH)</h3>
+        <p class="text-xs text-slate-500 mb-4" data-i18n="image_trends_hint">Obrazy zeskanowane co najmniej dwukrotnie w okresie — czy jest lepiej, czy gorzej</p>
+        <div class="relative h-80">
+          <canvas id="chart-trends"></canvas>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <div class="flex justify-between items-baseline mb-4">
+            <h3 class="font-semibold" data-i18n="top_cves">🐞 Najczęstsze CVE</h3>
+            <span id="cve-sample-note" class="text-xs text-slate-500"></span>
+          </div>
+          <p class="text-xs text-slate-500 mb-2" data-i18n="cve_sort_hint">Sortowanie: CISA KEV → EPSS → severity</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="text-slate-400 border-b border-slate-700">
+                <tr>
+                  <th class="text-left py-2">Sev</th>
+                  <th class="text-left">CVE</th>
+                  <th class="text-left">EPSS</th>
+                  <th class="text-left">KEV</th>
+                  <th class="text-left" data-i18n="col_pkg">Pakiet</th>
+                  <th class="text-right" data-i18n="col_count">Wystąpień</th>
+                  <th class="text-right" data-i18n="col_images">Obrazy</th>
+                </tr>
+              </thead>
+              <tbody id="stats-cve-table"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 class="font-semibold mb-4" data-i18n="top_pkgs">📦 Pakiety z największą liczbą CVE</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="text-slate-400 border-b border-slate-700">
+                <tr>
+                  <th class="text-left py-2" data-i18n="col_pkg">Pakiet</th><th class="text-left">C</th>
+                  <th class="text-left">H</th><th class="text-left">M</th><th class="text-right" data-i18n="col_total">Razem</th>
+                </tr>
+              </thead>
+              <tbody id="stats-pkg-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 mb-6 overflow-x-auto">
+        <h3 class="font-semibold mb-4" data-i18n="image_rank">🏷️ Ranking obrazów (ostatni skan)</h3>
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 border-b border-slate-700">
+            <tr>
+              <th class="text-left py-2 px-2" data-i18n="col_image">Obraz</th>
+              <th class="text-left px-2" data-i18n="col_trend">Trend</th>
+              <th class="text-left px-2" data-i18n="col_vulns">Podatności</th>
+              <th class="text-left px-2" data-i18n="col_scans">Skanów</th>
+              <th class="text-right px-2" data-i18n="col_actions">Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="stats-image-table"></tbody>
+        </table>
+      </div>
+
+      <div id="image-history-card" class="hidden bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <div class="flex justify-between items-center mb-4 gap-2 flex-wrap">
+          <h3 id="image-history-title" class="font-semibold"></h3>
+          <div class="flex items-center gap-2">
+            <button id="btn-hist-diff" onclick="compareHistoryScans()" class="hidden px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm" data-i18n="compare_last">⚖️ Porównaj ostatnie dwa</button>
+            <button onclick="closeImageHistory()" class="text-slate-400 hover:text-white">✕</button>
+          </div>
+        </div>
+        <div class="relative h-64 mb-4">
+          <canvas id="chart-image-history"></canvas>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="text-slate-400 border-b border-slate-700">
+              <tr>
+                <th class="text-left py-2" data-i18n="col_date">Data</th>
+                <th class="text-left" data-i18n="col_status">Status</th>
+                <th class="text-left" data-i18n="col_vulns">Podatności</th>
+                <th class="text-left" data-i18n="col_secrets">Sekrety</th>
+                <th class="text-right"></th>
+              </tr>
+            </thead>
+            <tbody id="image-history-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-containers" class="tab-panel hidden">
+    <div id="container-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+    <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+        <div>
+          <h2 class="font-semibold" data-i18n="containers_title">🐋 Kontenery na hoście</h2>
+          <p class="text-xs text-slate-500 mt-1" data-i18n="containers_hint">Lista z docker.sock — skanuj obraz bez przepisywania tagu</p>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div id="containers-mgr-toolbar" class="hidden flex items-center gap-3 flex-wrap">
+            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input type="checkbox" id="secrets-checkbox-containers" class="w-4 h-4">
+              <span data-i18n="scan_secrets_short">🔐 skanuj też sekrety</span>
+            </label>
+            <span id="selected-count" class="text-sm text-slate-400"></span>
+            <button onclick="scanSelectedContainers()" id="btn-scan-selected"
+                    class="hidden px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-semibold">
+            </button>
+          </div>
+          <button onclick="loadContainers()" class="text-sm text-sky-400 hover:underline" data-i18n="refresh">🔄 Odśwież</button>
+        </div>
+      </div>
+      <div class="flex gap-2 mb-4 flex-wrap items-center">
+        <input id="container-filter" data-i18n-placeholder="filter_container" placeholder="Filtruj nazwę, obraz, stack…" oninput="renderContainers()"
+               class="px-3 py-1.5 rounded-lg bg-slate-700 border border-slate-600 text-sm w-64">
+        <div id="container-status-filters" class="flex gap-2 flex-wrap"></div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 border-b border-slate-700">
+            <tr>
+              <th id="th-container-check" class="text-left py-2 px-2"><input type="checkbox" onchange="toggleSelectAllContainers(this)"></th>
+              <th class="text-left px-2" data-i18n="col_name">Nazwa</th>
+              <th class="text-left px-2" data-i18n="col_image">Obraz</th>
+              <th class="text-left px-2">Stack</th>
+              <th class="text-left px-2" data-i18n="col_status">Status</th>
+              <th class="text-left px-2" data-i18n="col_created">Utworzono</th>
+              <th class="text-left px-2" data-i18n="col_ip">Adres IP</th>
+              <th class="text-left px-2" data-i18n="col_ports">Porty</th>
+              <th class="text-left px-2" data-i18n="col_size">Rozmiar</th>
+              <th class="text-left px-2" data-i18n="col_owner">Właściciel</th>
+              <th class="text-right px-2" data-i18n="col_actions">Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="container-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-admin" class="tab-panel hidden">
+    <div class="grid md:grid-cols-2 gap-6">
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <h2 class="font-semibold mb-1" data-i18n="my_account">👤 Moje konto</h2>
+        <p class="text-xs text-slate-500 mb-4" data-i18n="my_account_hint">Zmiana hasła jest zapisywana w dzienniku audytu</p>
+        <input id="my-new-pass" type="password" data-i18n-placeholder="new_password" placeholder="Nowe hasło" class="w-full mb-3 px-4 py-2 rounded-lg bg-slate-700 border border-slate-600">
+        <button onclick="changeMyPassword()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg font-semibold text-sm" data-i18n="change_password">Zmień moje hasło</button>
+      </div>
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <h2 class="font-semibold mb-1" data-i18n="new_user">➕ Nowy użytkownik</h2>
+        <p class="text-xs text-slate-500 mb-4" data-i18n="new_user_hint">user czyta raporty · manager skanuje · admin zarządza</p>
+        <input id="nu-user" data-i18n-placeholder="login" placeholder="Login" class="w-full mb-2 px-4 py-2 rounded-lg bg-slate-700 border border-slate-600">
+        <input id="nu-pass" type="password" data-i18n-placeholder="password" placeholder="Hasło" class="w-full mb-2 px-4 py-2 rounded-lg bg-slate-700 border border-slate-600">
+        <select id="nu-role" class="w-full mb-3 px-4 py-2 rounded-lg bg-slate-700 border border-slate-600">
+          <option value="user" data-i18n="role_user">user — tylko przegląda i pobiera raporty</option>
+          <option value="manager" data-i18n="role_manager">manager — może uruchamiać i usuwać skany</option>
+          <option value="admin" data-i18n="role_admin">admin — pełny dostęp + zarządzanie użytkownikami</option>
+        </select>
+        <button onclick="createUser()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold text-sm" data-i18n="add">Dodaj</button>
+      </div>
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 md:col-span-2">
+        <h2 class="font-semibold mb-4" data-i18n="users">👥 Użytkownicy</h2>
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 border-b border-slate-700">
+            <tr>
+              <th class="text-left py-2" data-i18n="login">Login</th>
+              <th class="text-left" data-i18n="col_role">Rola</th>
+              <th class="text-right" data-i18n="col_actions">Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="user-table"></tbody>
+        </table>
+      </div>
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="font-semibold" data-i18n="health">🩺 Healthcheck</h2>
+          <button onclick="loadHealth()" class="text-sm text-sky-400 hover:underline" data-i18n="refresh">🔄 Odśwież</button>
+        </div>
+        <div id="health-cards" class="grid grid-cols-2 gap-2 mb-3"></div>
+        <details>
+          <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-300">JSON</summary>
+          <pre id="health-box" class="text-xs bg-slate-900 rounded-lg p-3 overflow-x-auto mt-2"></pre>
+        </details>
+      </div>
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <h2 class="font-semibold mb-1" data-i18n="maintenance">🧹 Maintenance</h2>
+        <p class="text-xs text-slate-500 mb-4" data-i18n="maintenance_hint">EPSS i CISA KEV odświeżają się same co ~24 h; tu możesz wymusić</p>
+        <div class="flex flex-col gap-2">
+          <button onclick="maintUpdateDb()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-left" data-i18n="maint_db">📥 Aktualizuj bazę CVE (Trivy DB)</button>
+          <button onclick="maintUpdateFeeds()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-left" data-i18n="maint_feeds">📡 Aktualizuj EPSS / CISA KEV</button>
+          <div class="flex gap-2">
+            <input id="cleanup-days" type="number" value="30" class="w-24 px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-sm">
+            <button onclick="maintCleanup()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm" data-i18n="maint_cleanup">🗑 Usuń skany starsze niż (dni)</button>
+          </div>
+          <button onclick="maintVacuum()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-left" data-i18n="maint_vacuum">🧼 VACUUM bazy SQLite</button>
+        </div>
+        <p id="maint-msg" class="text-xs text-slate-400 mt-3"></p>
+      </div>
+
+      <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 md:col-span-2">
+        <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <div>
+            <h2 class="font-semibold" data-i18n="audit_title">🧾 Dziennik audytu</h2>
+            <p class="text-xs text-slate-500 mt-1" data-i18n="audit_hint">Logowania, skany, usunięcia, hasła, eksporty</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button onclick="exportAudit('csv')" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">CSV</button>
+            <button onclick="exportAudit('json')" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">JSON</button>
+            <button onclick="loadAudit(1)" class="text-sm text-sky-400 hover:underline" data-i18n="refresh">🔄 Odśwież</button>
+          </div>
+        </div>
+        <div class="flex gap-2 mb-4 flex-wrap">
+          <select id="audit-action" onchange="loadAudit(1)" class="px-3 py-1.5 rounded-lg bg-slate-700 border border-slate-600 text-sm">
+            <option value="" data-i18n="filter_all">Wszystkie</option>
+          </select>
+          <input id="audit-user" data-i18n-placeholder="filter_user" placeholder="Użytkownik…" onkeydown="if(event.key==='Enter')loadAudit(1)"
+                 class="px-3 py-1.5 rounded-lg bg-slate-700 border border-slate-600 text-sm w-40">
+          <button onclick="loadAudit(1)" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm" data-i18n="filter">Filtruj</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead class="text-slate-400 border-b border-slate-700">
+              <tr>
+                <th class="text-left py-2" data-i18n="col_date">Data</th>
+                <th class="text-left" data-i18n="col_user">Użytkownik</th>
+                <th class="text-left" data-i18n="col_action">Akcja</th>
+                <th class="text-left" data-i18n="col_target">Cel</th>
+                <th class="text-left" data-i18n="col_details">Szczegóły</th>
+                <th class="text-left">IP</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-between items-center mt-3 text-xs text-slate-400">
+          <span id="audit-page-label"></span>
+          <div class="flex gap-2">
+            <button onclick="loadAudit(auditPage-1)" id="audit-prev" class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600" data-i18n="prev">←</button>
+            <button onclick="loadAudit(auditPage+1)" id="audit-next" class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600" data-i18n="next">→</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-6 z-50">
+  <div class="bg-slate-800 rounded-2xl w-full max-w-6xl max-h-[85vh] flex flex-col border border-slate-700">
+    <div class="flex justify-between items-center p-5 border-b border-slate-700 gap-3 flex-wrap">
+      <h3 id="modal-title" class="font-bold"></h3>
+      <div class="flex gap-3 items-center flex-wrap">
+        <button onclick="showScanLogs(currentScanId)" class="text-slate-400 hover:text-sky-400 text-sm" data-i18n="scan_logs">📜 Logi skanu</button>
+        <button onclick="dl(currentScanId,'csv')" class="text-slate-400 hover:text-sky-400 text-sm">CSV</button>
+        <button onclick="dl(currentScanId,'pdf')" class="text-slate-400 hover:text-sky-400 text-sm">PDF</button>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl">✕</button>
+      </div>
+    </div>
+    <div id="modal-body" class="overflow-y-auto p-5"></div>
+  </div>
+</div>
+
+<div id="vuln-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-[60]">
+  <div class="bg-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col border border-slate-700">
+    <div class="flex justify-between items-center p-5 border-b border-slate-700">
+      <h3 id="vuln-title" class="font-bold"></h3>
+      <button onclick="closeVulnModal()" class="text-slate-400 hover:text-white text-xl">✕</button>
+    </div>
+    <div id="vuln-body" class="overflow-y-auto p-5 text-sm space-y-3"></div>
+  </div>
+</div>
+
+<div id="logs-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-[60]">
+  <div class="bg-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-slate-700">
+    <div class="flex justify-between items-center p-5 border-b border-slate-700">
+      <h3 id="logs-title" class="font-bold"></h3>
+      <button onclick="closeLogsModal()" class="text-slate-400 hover:text-white text-xl">✕</button>
+    </div>
+    <pre id="logs-body" class="overflow-y-auto p-5 text-xs flex-1 whitespace-pre-wrap"></pre>
+  </div>
+</div>
+
+<div id="diff-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-6 z-50">
+  <div class="bg-slate-800 rounded-2xl w-full max-w-6xl max-h-[85vh] flex flex-col border border-slate-700">
+    <div class="flex justify-between items-center p-5 border-b border-slate-700 gap-3 flex-wrap">
+      <h3 id="diff-title" class="font-bold"></h3>
+      <button onclick="closeDiffModal()" class="text-slate-400 hover:text-white text-xl">✕</button>
+    </div>
+    <div id="diff-summary" class="px-5 pt-4 grid grid-cols-3 gap-3"></div>
+    <div class="px-5 pt-4 flex gap-2 flex-wrap" id="diff-tabs"></div>
+    <div id="diff-body" class="overflow-y-auto p-5"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

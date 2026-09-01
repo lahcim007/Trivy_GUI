@@ -1,0 +1,20 @@
+services:
+  trivy-gui:
+    build: .
+    container_name: trivy-gui
+    ports:
+      - "8086:8000"
+    environment:
+      - SECRET_KEY=change-me
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=change-me
+      - TOKEN_EXPIRE_MINUTES=120
+    volumes:
+      - trivy-cache:/root/.cache/trivy
+      - trivy-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  trivy-cache:
+  trivy-data:
